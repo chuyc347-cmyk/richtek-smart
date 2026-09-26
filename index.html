@@ -362,6 +362,34 @@ function matches(text, re){
   }
   return out;
 }
+
+/* alignStrong 最後一條規則「…目標」沒有左邊界，比對可能從詞中間開始，
+   証擮標籤就會出現「務部年度品質目標」這種開頭被切掉的字串。
+   這裡只把「…目標」這類比對結果往左補回子句開頭（標點之後，空白不算邊界，
+   「公司 2030 年…」才不會被切開），再去掉開頭的「以支持」「將」這類連接詞與動詞；
+   「事業處」「客戶」這類本身完整的關鍵字不往左擴，避免變成「將事業處」。
+   最後丟掉被其他片段完整包含的短片段。
+   只影響証擮顯示 — 分數只看有沒有比對到，不看比對到幾個。 */
+function alignPhrases(text){
+  var lead = new RegExp("^(?:並|且|將|把|使|讓|" + RE.purpose.source.replace(/^\(/, "").replace(/\)$/, "") + ")+");
+  var re = new RegExp(RE.alignStrong.source, "g");
+  var found = [], m;
+  while((m = re.exec(text)) !== null){
+    if(m[0] === ""){ re.lastIndex++; continue; }
+    var phrase = m[0].trim();
+    if(/目標$/.test(phrase)){
+      var start = m.index, end = start + m[0].length;
+      while(start > 0 && !/[,，。;；、:：!！?？]/.test(text.charAt(start - 1))) start--;
+      var wide = text.slice(start, end).replace(lead, "").trim();
+      if(wide) phrase = wide;
+    }
+    if(phrase && found.indexOf(phrase) === -1) found.push(phrase);
+  }
+  var out = found.filter(function(p){
+    return !found.some(function(q){ return q !== p && q.indexOf(p) !== -1; });
+  });
+  return out.length ? out : found;
+}
 function clamp(n){ return Math.max(0, Math.min(100, Math.round(n))); }
 
 /* 千分位逗號會切斷「由…至…」的比對(例:由 1,200 ppm 降低至 600 ppm),
@@ -498,7 +526,7 @@ function evalA(text){
 /* ---------- R 相關 ---------- */
 function evalR(text){
   var ev = [], tips = [], score = 18;
-  var strong = matches(text, RE.alignStrong);
+  var strong = alignPhrases(text);
   var units = matches(text, RE.alignUnit);
   var purposes = matches(text, RE.purpose);
 
